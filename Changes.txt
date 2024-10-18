@@ -1,0 +1,33 @@
+randwirenn.py:
+
+Added batch normalization layers
+Implemented dropout for regularization
+Kept the random wiring concept
+
+
+train.py:
+
+Implemented data augmentation for training set
+Added validation set and loop
+Implemented learning rate scheduler
+Increased model complexity (larger hidden layers)
+Increased number of epochs
+Implemented early stopping (save best model)
+
+
+test.py:
+
+Added device (CPU/GPU) support
+Implemented more comprehensive evaluation metrics (classification report, confusion matrix)
+Updated model architecture to match the improved train.py
+Added visualization of the confusion matrix
+
+
+main.py:
+
+Added learning rate scheduler
+Implemented validation during training
+Added early stopping (save best model)
+Increased number of epochs
+Added device (CPU/GPU) support
+Adjusted hyperparameters for better performance
