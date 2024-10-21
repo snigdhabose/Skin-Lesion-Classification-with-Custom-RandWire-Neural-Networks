@@ -11,6 +11,37 @@ import matplotlib.pyplot as plt
 
 class HAM10000Dataset(Dataset):
     # ... (keep the existing implementation)
+    def __init__(self, csv_file, img_dir_part1, img_dir_part2, transform=None):
+        self.metadata = pd.read_csv(csv_file)
+        self.img_dir_part1 = img_dir_part1
+        self.img_dir_part2 = img_dir_part2
+        self.transform = transform
+
+        # Map string labels to integers dynamically
+        unique_labels = self.metadata.iloc[:, 2].unique()
+        self.label_mapping = {label: idx for idx, label in enumerate(unique_labels)}
+
+    def __len__(self):
+        return len(self.metadata)
+
+    def __getitem__(self, idx):
+        img_name = self.metadata.iloc[idx, 1] + ".jpg"  # Add file extension
+
+        img_path = os.path.join(self.img_dir_part1, img_name)
+        if not os.path.exists(img_path):
+            img_path = os.path.join(self.img_dir_part2, img_name)
+        if not os.path.exists(img_path):
+            raise FileNotFoundError(f"Image {img_name} not found in part 1 or part 2 directories.")
+
+        image = Image.open(img_path).convert('RGB')  # Convert to RGB
+        label_str = self.metadata.iloc[idx, 2]  # Assuming the label is in column 2
+        label = self.label_mapping[label_str]  # Convert label to integer
+        label = torch.tensor(label, dtype=torch.long)
+
+        if self.transform:
+            image = self.transform(image)
+
+        return image, label
 
 def test(model, test_loader, device):
     model.eval()
