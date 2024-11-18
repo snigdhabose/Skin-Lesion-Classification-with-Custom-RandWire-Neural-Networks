@@ -41,7 +41,7 @@ class RandWiReNN(nn.Module):
 
         # Pass through all hidden layers
         for layer in self.layers:
-            x = F.relu(layer(x))
+            x = F.sigmoid(layer(x))
             # print(f"Output shape after layer: {x.shape}")
 
         # Pass through the output layer

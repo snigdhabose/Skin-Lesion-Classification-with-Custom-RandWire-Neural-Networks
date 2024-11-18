@@ -33,7 +33,7 @@ train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
 
 # Initialize the model
-model = RandWiReNN(input_size, output_size, hidden_layers, wire_density=0.5)
+model = RandWiReNN(input_size, output_size, hidden_layers, wire_density=0.25)
 # Test the model with a dummy input
 dummy_input = torch.randn(1, input_size)  # Create a dummy input tensor
 dummy_output = model(dummy_input)  # Run it through the model

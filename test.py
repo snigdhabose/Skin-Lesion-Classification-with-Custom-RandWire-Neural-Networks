@@ -70,9 +70,9 @@ def test(model):
             _, predicted = torch.max(outputs.data, 1)
 
             # Debugging information for each batch
-            print(f"\nBatch {i+1}:")
-            print(f"True labels:    {labels.tolist()}")
-            print(f"Predicted labels: {predicted.tolist()}")
+            # print(f"\nBatch {i+1}:")
+            # print(f"True labels:    {labels.tolist()}")
+            # print(f"Predicted labels: {predicted.tolist()}")
             
             # Track total correct predictions
             total_correct += (predicted == labels).sum().item()

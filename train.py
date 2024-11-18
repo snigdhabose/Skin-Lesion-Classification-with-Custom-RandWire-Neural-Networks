@@ -10,9 +10,9 @@ from models.randwirenn import RandWiReNN
 input_size = 224 * 224 * 3  # Example input size for RGB images resized to 224x224
 output_size = 7  # Number of classes in HAM10000
 hidden_layers = [512, 256, 128]
-learning_rate = 0.001
-epochs = 10
-batch_size = 32
+learning_rate = 0.01
+epochs = 5
+batch_size = 64
 
 # Custom Dataset for HAM10000
 class HAM10000Dataset(Dataset):
@@ -77,12 +77,14 @@ train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True)
 # Initialize the model
 model = RandWiReNN(input_size, output_size, hidden_layers, wire_density=0.5)
 criterion = torch.nn.CrossEntropyLoss()
-optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+# optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, momentum=0.95)
 
 # Training loop
 def train():
     model.train()
     for epoch in range(epochs):
+        print(f"Started training for Epoch {epoch+1}/{epochs}")
         running_loss = 0
         for images, labels in train_loader:
             images = images.view(images.size(0), -1)  # Flatten the images
