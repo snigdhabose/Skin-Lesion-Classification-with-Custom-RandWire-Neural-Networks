@@ -3,13 +3,22 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class RandWiReNN(nn.Module):
-    def __init__(self, input_size, output_size, hidden_layers, wire_density=0.5):
+    def __init__(self, input_channels, output_size, hidden_layers, wire_density=0.5):
         super(RandWiReNN, self).__init__()
+        
+        # Initial CNN layer
+        self.cnn_layer = nn.Conv2d(input_channels, 32, kernel_size=3, stride=1, padding=1)
+        self.pool = nn.MaxPool2d(kernel_size=2, stride=2, padding=0)
+        
+        # Calculate the flattened size after the CNN layer
+        # Assuming input image size of 224x224 and 2x downsampling from pooling
+        cnn_output_size = 32 * (224 // 2) * (224 // 2)
+        
+        # Initialize layers
         self.layers = nn.ModuleList()
+        prev_size = cnn_output_size
         
-        prev_size = input_size
-        
-        # Create random wired layers
+        # Create random-wired layers
         for hidden_size in hidden_layers:
             layer = self.create_random_layer(prev_size, hidden_size, wire_density)
             self.layers.append(layer)
@@ -35,17 +44,14 @@ class RandWiReNN(nn.Module):
         return linear_layer
 
     def forward(self, x):
-        # print(f"Input shape before flattening: {x.shape}")
-        x = x.view(x.size(0), -1)  # Flatten the input
-        # print(f"Input shape after flattening: {x.shape}")
-
+        # Pass through initial CNN layer
+        x = self.pool(F.relu(self.cnn_layer(x)))  # Shape after CNN layer
+        x = x.view(x.size(0), -1)  # Flatten the output
+        
         # Pass through all hidden layers
         for layer in self.layers:
             x = F.relu(layer(x))
-            # print(f"Output shape after layer: {x.shape}")
-
+        
         # Pass through the output layer
         x = self.output_layer(x)
-        # print(f"Output shape after final layer: {x.shape}")
         return x
-
