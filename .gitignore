@@ -1,6 +1,7 @@
 # Ignore virtual environment folders
 venv/
 myenv/
+project_env/
 
 # Ignore the data directory
 data/
