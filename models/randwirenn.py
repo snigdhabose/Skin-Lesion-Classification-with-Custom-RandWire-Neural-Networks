@@ -32,7 +32,11 @@ class RandWiReNN(nn.Module):
             linear_layer.weight.data *= weight_mask
             print(f"Layer created with weight mask applied: in_features={in_features}, out_features={out_features}, wire_density={wire_density}")
 
-        return linear_layer
+        bn = nn.BatchNorm1d(out_features)
+        dropout = nn.Dropout(p=0.3)  # You can adjust the dropout rate
+
+        # return linear_layer
+        return nn.Sequential(linear_layer, bn, dropout)
 
     def forward(self, x):
         # print(f"Input shape before flattening: {x.shape}")

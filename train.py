@@ -61,10 +61,20 @@ class HAM10000Dataset(Dataset):
 
 
 # Define your data transformation
+# transform = transforms.Compose([
+#     transforms.Resize((224, 224)),  # Resize all images to 224x224
+#     transforms.ToTensor(),
+#     transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])  # Normalize
+# ])
 transform = transforms.Compose([
-    transforms.Resize((224, 224)),  # Resize all images to 224x224
+    transforms.Resize((224, 224)),
+    transforms.RandomHorizontalFlip(),
+    transforms.RandomVerticalFlip(),
+    transforms.RandomRotation(20),
+    transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),
+    transforms.RandomResizedCrop(224, scale=(0.8, 1.0)),
     transforms.ToTensor(),
-    transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])  # Normalize
+    transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
 ])
 
 # Load the HAM10000 dataset, including both part 1 and part 2
@@ -79,9 +89,41 @@ model = RandWiReNN(input_size, output_size, hidden_layers, wire_density=0.5)
 criterion = torch.nn.CrossEntropyLoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
+scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=3, verbose=True)
+
+class EarlyStopping:
+    def __init__(self, patience=5, verbose=False, delta=0, path='checkpoint.pth'):
+        self.patience = patience
+        self.verbose = verbose
+        self.delta = delta
+        self.path = path
+        self.counter = 0
+        self.best_loss = None
+        self.early_stop = False
+
+    def __call__(self, loss, model):
+        if self.best_loss is None or loss < self.best_loss - self.delta:
+            self.best_loss = loss
+            self.save_checkpoint(model)
+            self.counter = 0
+        else:
+            self.counter += 1
+            if self.verbose:
+                print(f"EarlyStopping counter: {self.counter} out of {self.patience}")
+            if self.counter >= self.patience:
+                self.early_stop = True
+
+    def save_checkpoint(self, model):
+        """Save model when validation loss improves."""
+        if self.verbose:
+            print(f"Validation loss decreased. Saving model to {self.path}...")
+        torch.save(model.state_dict(), self.path)
+
 # Training loop
 def train():
     model.train()
+    # Initialize EarlyStopping
+    early_stopping = EarlyStopping(patience=5, verbose=True, path='randwirenn_model.pth')
     for epoch in range(epochs):
         running_loss = 0
         for images, labels in train_loader:
@@ -96,10 +138,28 @@ def train():
             optimizer.step()
 
             running_loss += loss.item()
-        print(f"Epoch {epoch+1}/{epochs}, Loss: {running_loss/len(train_loader)}")
-    # Save the model after training is completed
-    torch.save(model.state_dict(), 'randwirenn_model.pth')
-    print("Model saved as 'randwirenn_model.pth'")
+            # scheduler.step(loss)
+
+        # Average loss for the epoch
+        avg_loss = running_loss / len(train_loader)
+        print(f"Epoch {epoch+1}/{epochs}, Loss: {avg_loss}")
+
+        # Step scheduler if used
+        scheduler.step(avg_loss)
+
+        # Apply early stopping
+        early_stopping(avg_loss, model)
+        if early_stopping.early_stop:
+            print("Early stopping triggered")
+            break
+
+    # Load the best model saved during training
+    model.load_state_dict(torch.load('randwirenn_model.pth'))
+    print("Training completed. Best model loaded.")
+
+    # # Save the model after training is completed
+    # torch.save(model.state_dict(), 'randwirenn_model.pth')
+    # print("Model saved as 'randwirenn_model.pth'")
 
 if __name__ == "__main__":
     train()

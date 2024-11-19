@@ -47,10 +47,21 @@ def test(model):
     print("Starting testing phase...")
 
     # Define transformations (adjust these according to your dataset)
+    # transform = transforms.Compose([
+    #     transforms.Resize((224, 224)),  # Resize the image to match the input size used during training
+    #     transforms.ToTensor(),
+    #     transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])  # Normalization
+    # ])
+
     transform = transforms.Compose([
-        transforms.Resize((224, 224)),  # Resize the image to match the input size used during training
+        transforms.Resize((224, 224)),
+        transforms.RandomHorizontalFlip(),
+        transforms.RandomVerticalFlip(),
+        transforms.RandomRotation(20),
+        transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),
+        transforms.RandomResizedCrop(224, scale=(0.8, 1.0)),
         transforms.ToTensor(),
-        transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])  # Normalization
+        transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
     ])
 
     # Load the HAM10000 test dataset
