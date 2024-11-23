@@ -1,51 +1,84 @@
+# randwirenn_with_resnet_features.py
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-class RandWiReNN(nn.Module):
-    def __init__(self, input_size, output_size, hidden_layers, wire_density=0.5):
-        super(RandWiReNN, self).__init__()
-        self.layers = nn.ModuleList()
-        
-        prev_size = input_size
-        
-        # Create random wired layers
-        for hidden_size in hidden_layers:
-            layer = self.create_random_layer(prev_size, hidden_size, wire_density)
-            self.layers.append(layer)
-            prev_size = hidden_size
-            print(f"Created layer: input size {prev_size}, output size {hidden_size}")
-
-        # Final output layer
-        self.output_layer = nn.Linear(prev_size, output_size)
-        print(f"Created output layer: input size {prev_size}, output size {output_size}")
-
-    def create_random_layer(self, in_features, out_features, wire_density):
-        """Create a layer with random connections (weights)."""
-        linear_layer = nn.Linear(in_features, out_features, bias=True)
-        
-        # Create the weight mask to match the shape of the weight matrix
-        weight_mask = (torch.rand(out_features, in_features) < wire_density).float()
-        
-        # Adjust the weights based on the mask
-        with torch.no_grad():
-            linear_layer.weight.data *= weight_mask
-            print(f"Layer created with weight mask applied: in_features={in_features}, out_features={out_features}, wire_density={wire_density}")
-
-        return linear_layer
+class BottleneckBlock(nn.Module):
+    def __init__(self, in_channels, bottleneck_channels, out_channels):
+        super().__init__()
+        self.block = nn.Sequential(
+            nn.Conv2d(in_channels, bottleneck_channels, kernel_size=1),
+            nn.BatchNorm2d(bottleneck_channels),
+            nn.ReLU(),
+            nn.Conv2d(bottleneck_channels, bottleneck_channels, kernel_size=3, padding=1),
+            nn.BatchNorm2d(bottleneck_channels),
+            nn.ReLU(),
+            nn.Conv2d(bottleneck_channels, out_channels, kernel_size=1),
+            nn.BatchNorm2d(out_channels)
+        )
 
     def forward(self, x):
-        # print(f"Input shape before flattening: {x.shape}")
-        x = x.view(x.size(0), -1)  # Flatten the input
-        # print(f"Input shape after flattening: {x.shape}")
+        return self.block(x)
 
-        # Pass through all hidden layers
-        for layer in self.layers:
-            x = F.relu(layer(x))
-            # print(f"Output shape after layer: {x.shape}")
+class RandWiReNNWithResNetFeatures(nn.Module):
+    def __init__(self, input_channels, output_size):
+        super(RandWiReNNWithResNetFeatures, self).__init__()
 
-        # Pass through the output layer
-        x = self.output_layer(x)
-        # print(f"Output shape after final layer: {x.shape}")
+        # Initial convolutional layer
+        self.initial_conv = nn.Conv2d(input_channels, 64, kernel_size=3, stride=1, padding=1)
+        self.bn1 = nn.BatchNorm2d(64)
+
+        # Bottleneck blocks with skip connections
+        self.bottleneck1 = BottleneckBlock(64, 32, 64)
+        self.bottleneck2 = BottleneckBlock(64, 32, 64)
+
+        # Downsampling layer
+        self.downsample = nn.Conv2d(64, 128, kernel_size=3, stride=2, padding=1)
+        self.bn2 = nn.BatchNorm2d(128)
+
+        # Additional bottleneck block after downsampling
+        self.bottleneck3 = BottleneckBlock(128, 64, 128)
+
+        # Placeholder for fully connected layer (init with dummy size)
+        self.fc = nn.Linear(128 * 56 * 56, output_size)  # Initial size, will update
+
+        # Initialize fully connected layer size dynamically
+        self._initialize_fc()
+
+    def forward(self, x):
+        # Initial conv layer with batch normalization
+        x = F.relu(self.bn1(self.initial_conv(x)))
+
+        # First bottleneck block with residual connection
+        residual = x
+        x = self.bottleneck1(x) + residual  # Skip connection
+
+        # Second bottleneck block with residual connection
+        residual = x
+        x = self.bottleneck2(x) + residual  # Skip connection
+
+        # Downsampling with batch normalization
+        x = F.relu(self.bn2(self.downsample(x)))
+
+        # Third bottleneck block with residual connection
+        residual = x
+        x = self.bottleneck3(x) + residual  # Skip connection
+
+        # Flatten and output
+        x = x.view(x.size(0), -1)
+        x = self.fc(x)
         return x
 
+    def _initialize_fc(self):
+        # Pass a dummy input through the model to compute the correct flattened size
+        with torch.no_grad():
+            dummy_input = torch.zeros(1, 3, 224, 224)
+            x = F.relu(self.bn1(self.initial_conv(dummy_input)))
+            x = self.bottleneck1(x) + x
+            x = self.bottleneck2(x) + x
+            x = F.relu(self.bn2(self.downsample(x)))
+            x = self.bottleneck3(x) + x
+            flattened_size = x.view(1, -1).size(1)
+
+        # Redefine the fully connected layer with the correct input size
+        self.fc = nn.Linear(flattened_size, self.fc.out_features)
