@@ -1,84 +1,58 @@
-# randwirenn_with_resnet_features.py
+# randwirenn.py
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torchvision import models
 
-class BottleneckBlock(nn.Module):
-    def __init__(self, in_channels, bottleneck_channels, out_channels):
-        super().__init__()
-        self.block = nn.Sequential(
-            nn.Conv2d(in_channels, bottleneck_channels, kernel_size=1),
-            nn.BatchNorm2d(bottleneck_channels),
-            nn.ReLU(),
-            nn.Conv2d(bottleneck_channels, bottleneck_channels, kernel_size=3, padding=1),
-            nn.BatchNorm2d(bottleneck_channels),
-            nn.ReLU(),
-            nn.Conv2d(bottleneck_channels, out_channels, kernel_size=1),
-            nn.BatchNorm2d(out_channels)
-        )
+class RandWiReNN(nn.Module):
+    def __init__(self, output_size, hidden_layers, wire_density=0.8):
+        super(RandWiReNN, self).__init__()
 
-    def forward(self, x):
-        return self.block(x)
+        # Load a pretrained ResNet18 model
+        self.cnn_model = models.resnet18(pretrained=True)
 
-class RandWiReNNWithResNetFeatures(nn.Module):
-    def __init__(self, input_channels, output_size):
-        super(RandWiReNNWithResNetFeatures, self).__init__()
+        # Freeze initial layers to retain pretrained features
+        for param in self.cnn_model.parameters():
+            param.requires_grad = False
 
-        # Initial convolutional layer
-        self.initial_conv = nn.Conv2d(input_channels, 64, kernel_size=3, stride=1, padding=1)
-        self.bn1 = nn.BatchNorm2d(64)
+        # Unfreeze the last convolutional block
+        for param in self.cnn_model.layer4.parameters():
+            param.requires_grad = True
 
-        # Bottleneck blocks with skip connections
-        self.bottleneck1 = BottleneckBlock(64, 32, 64)
-        self.bottleneck2 = BottleneckBlock(64, 32, 64)
+        # Replace the fully connected layer with Identity to get features
+        num_ftrs = self.cnn_model.fc.in_features
+        self.cnn_model.fc = nn.Identity()
 
-        # Downsampling layer
-        self.downsample = nn.Conv2d(64, 128, kernel_size=3, stride=2, padding=1)
-        self.bn2 = nn.BatchNorm2d(128)
+        # Random-wired fully connected layers
+        self.layers = nn.ModuleList()
+        prev_size = num_ftrs
+        self.dropout = nn.Dropout(p=0.5)  # Add dropout for regularization
 
-        # Additional bottleneck block after downsampling
-        self.bottleneck3 = BottleneckBlock(128, 64, 128)
+        for hidden_size in hidden_layers:
+            layer = self.create_random_layer(prev_size, hidden_size, wire_density)
+            self.layers.append(layer)
+            prev_size = hidden_size
 
-        # Placeholder for fully connected layer (init with dummy size)
-        self.fc = nn.Linear(128 * 56 * 56, output_size)  # Initial size, will update
+        # Output layer
+        self.output_layer = nn.Linear(prev_size, output_size)
 
-        # Initialize fully connected layer size dynamically
-        self._initialize_fc()
-
-    def forward(self, x):
-        # Initial conv layer with batch normalization
-        x = F.relu(self.bn1(self.initial_conv(x)))
-
-        # First bottleneck block with residual connection
-        residual = x
-        x = self.bottleneck1(x) + residual  # Skip connection
-
-        # Second bottleneck block with residual connection
-        residual = x
-        x = self.bottleneck2(x) + residual  # Skip connection
-
-        # Downsampling with batch normalization
-        x = F.relu(self.bn2(self.downsample(x)))
-
-        # Third bottleneck block with residual connection
-        residual = x
-        x = self.bottleneck3(x) + residual  # Skip connection
-
-        # Flatten and output
-        x = x.view(x.size(0), -1)
-        x = self.fc(x)
-        return x
-
-    def _initialize_fc(self):
-        # Pass a dummy input through the model to compute the correct flattened size
+    def create_random_layer(self, in_features, out_features, wire_density):
+        """Create a layer with random connections (weights)."""
+        linear_layer = nn.Linear(in_features, out_features, bias=True)
+        weight_mask = (torch.rand(out_features, in_features) < wire_density).float()
         with torch.no_grad():
-            dummy_input = torch.zeros(1, 3, 224, 224)
-            x = F.relu(self.bn1(self.initial_conv(dummy_input)))
-            x = self.bottleneck1(x) + x
-            x = self.bottleneck2(x) + x
-            x = F.relu(self.bn2(self.downsample(x)))
-            x = self.bottleneck3(x) + x
-            flattened_size = x.view(1, -1).size(1)
+            linear_layer.weight.data *= weight_mask
+        return linear_layer
 
-        # Redefine the fully connected layer with the correct input size
-        self.fc = nn.Linear(flattened_size, self.fc.out_features)
+    def forward(self, x):
+        # Pass through pretrained CNN model
+        x = self.cnn_model(x)
+
+        # Pass through random-wired fully connected layers
+        for layer in self.layers:
+            x = F.relu(layer(x))
+            x = self.dropout(x)  # Apply dropout
+
+        # Output layer
+        x = self.output_layer(x)
+        return x

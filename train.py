@@ -5,7 +5,7 @@ from PIL import Image
 import torch
 from torch.utils.data import Dataset, DataLoader, WeightedRandomSampler, Subset
 from torchvision import transforms
-from models.randwirenn import RandWiReNNWithResNetFeatures
+from models.randwirenn import RandWiReNN
 from tqdm import tqdm
 from sklearn.model_selection import train_test_split
 from torch.utils.tensorboard import SummaryWriter
@@ -16,10 +16,12 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # Hyperparameters
 input_channels = 3
 output_size = 7
-learning_rate = 0.0001
+hidden_layers = [512, 256, 128]
+wire_density = 0.8  # Increased wire density
+learning_rate = 0.0001  # Increased learning rate
 epochs = 150
-batch_size = 32
-patience = 10
+batch_size = 64  # Increased batch size
+patience = 5  # Early stopping patience
 
 # Custom Dataset for HAM10000
 class HAM10000Dataset(Dataset):
@@ -60,7 +62,8 @@ transform = transforms.Compose([
     transforms.RandomResizedCrop(224, scale=(0.8, 1.0)),
     transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2),
     transforms.ToTensor(),
-    transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
+    transforms.Normalize(mean=[0.485, 0.456, 0.406],  # Updated to ResNet's pretrained normalization
+                         std=[0.229, 0.224, 0.225])
 ])
 
 # Dataset and DataLoader
@@ -95,7 +98,7 @@ train_loader = DataLoader(train_subset, batch_size=batch_size, sampler=sampler)
 val_loader = DataLoader(val_subset, batch_size=batch_size, shuffle=False)
 
 # Initialize model, criterion, and optimizer
-model = RandWiReNNWithResNetFeatures(input_channels=input_channels, output_size=output_size).to(device)
+model = RandWiReNN(output_size=output_size, hidden_layers=hidden_layers, wire_density=wire_density).to(device)
 criterion = torch.nn.CrossEntropyLoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=1e-5)
 
