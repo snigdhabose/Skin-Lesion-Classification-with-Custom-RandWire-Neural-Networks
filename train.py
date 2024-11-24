@@ -1,4 +1,3 @@
-# train.py
 import os
 import pandas as pd
 from PIL import Image
@@ -12,21 +11,24 @@ from torch.utils.tensorboard import SummaryWriter
 
 # Set device
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(f"Using device: {device}")  # Debugging
 
 # Hyperparameters
-input_channels = 3
+input_size = 224 * 224 * 3  # Flattened size of input image (no CNN preprocessing)
 output_size = 7
-hidden_layers = [512, 256, 128]
+hidden_layers = [1024, 512, 256]  # Fully connected layer sizes
 wire_density = 0.8  # Increased wire density
-learning_rate = 0.0001  # Increased learning rate
+learning_rate = 0.0001
 epochs = 150
-batch_size = 64  # Increased batch size
-patience = 5  # Early stopping patience
+batch_size = 64
+patience = 10  # Increased early stopping patience
 
 # Custom Dataset for HAM10000
 class HAM10000Dataset(Dataset):
     def __init__(self, csv_file, img_dir_part1, img_dir_part2, transform=None):
+        print("Loading HAM10000 dataset...")  # Debugging
         self.metadata = pd.read_csv(csv_file)
+        # print(f"Loaded metadata: {len(self.metadata)} records.")  # Debugging
         self.img_dir_part1 = img_dir_part1
         self.img_dir_part2 = img_dir_part2
         self.transform = transform
@@ -51,19 +53,14 @@ class HAM10000Dataset(Dataset):
         if self.transform:
             image = self.transform(image)
 
-        return image, label
+        # print(f"Loaded sample {idx}: {image.shape}, label: {label}")  # Debugging
+        return image.view(-1), label  # Flatten the image for RandWiReNN
 
 # Data augmentation and transformation
 transform = transforms.Compose([
     transforms.Resize((224, 224)),
-    transforms.RandomHorizontalFlip(),
-    transforms.RandomVerticalFlip(),
-    transforms.RandomRotation(30),
-    transforms.RandomResizedCrop(224, scale=(0.8, 1.0)),
-    transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2),
-    transforms.ToTensor(),
-    transforms.Normalize(mean=[0.485, 0.456, 0.406],  # Updated to ResNet's pretrained normalization
-                         std=[0.229, 0.224, 0.225])
+    transforms.ToTensor(),  # Convert image to tensor
+    transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
 ])
 
 # Dataset and DataLoader
@@ -82,6 +79,8 @@ train_indices, val_indices = train_test_split(
     random_state=42
 )
 
+print(f"Train size: {len(train_indices)}, Validation size: {len(val_indices)}")  # Debugging
+
 train_subset = Subset(dataset, train_indices)
 val_subset = Subset(dataset, val_indices)
 
@@ -98,7 +97,8 @@ train_loader = DataLoader(train_subset, batch_size=batch_size, sampler=sampler)
 val_loader = DataLoader(val_subset, batch_size=batch_size, shuffle=False)
 
 # Initialize model, criterion, and optimizer
-model = RandWiReNN(output_size=output_size, hidden_layers=hidden_layers, wire_density=wire_density).to(device)
+print("Initializing RandWiReNN model...")  # Debugging
+model = RandWiReNN(input_size=input_size, output_size=output_size, hidden_layers=hidden_layers, wire_density=wire_density).to(device)
 criterion = torch.nn.CrossEntropyLoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=1e-5)
 
@@ -107,10 +107,12 @@ writer = SummaryWriter()
 
 # Training loop with early stopping
 def train():
+    print("Starting training loop...")  # Debugging
     best_val_loss = float('inf')
     trigger_times = 0
 
     for epoch in range(epochs):
+        # print(f"Epoch {epoch+1}/{epochs}")  # Debugging
         model.train()
         running_loss = 0
         with tqdm(total=len(train_loader), desc=f"Epoch {epoch+1}/{epochs}", unit="batch") as pbar:
@@ -126,6 +128,7 @@ def train():
                 pbar.update(1)
         avg_train_loss = running_loss / len(train_loader)
         writer.add_scalar('Loss/train', avg_train_loss, epoch)
+        # print(f"Epoch {epoch+1}: Train Loss = {avg_train_loss:.4f}")  # Debugging
 
         # Validation
         model.eval()
@@ -145,17 +148,18 @@ def train():
         val_accuracy = 100 * correct / total
         writer.add_scalar('Loss/validation', avg_val_loss, epoch)
         writer.add_scalar('Accuracy/validation', val_accuracy, epoch)
-        print(f"Epoch {epoch+1}/{epochs}, Train Loss: {avg_train_loss:.4f}, Val Loss: {avg_val_loss:.4f}, Val Acc: {val_accuracy:.2f}%")
+        # print(f"Epoch {epoch+1}: Val Loss = {avg_val_loss:.4f}, Val Acc = {val_accuracy:.2f}%")  # Debugging
 
         # Early stopping
         if avg_val_loss < best_val_loss:
             best_val_loss = avg_val_loss
             torch.save(model.state_dict(), 'best_randwirenn_model.pth')
+            # print(f"Model saved at epoch {epoch+1}")  # Debugging
             trigger_times = 0
         else:
             trigger_times += 1
             if trigger_times >= patience:
-                print('Early stopping!')
+                print('Early stopping triggered!')  # Debugging
                 break
 
     print("Training completed.")

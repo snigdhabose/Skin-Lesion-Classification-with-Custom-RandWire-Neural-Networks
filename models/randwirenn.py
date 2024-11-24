@@ -1,39 +1,25 @@
-# randwirenn.py
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torchvision import models
 
 class RandWiReNN(nn.Module):
-    def __init__(self, output_size, hidden_layers, wire_density=0.8):
+    def __init__(self, input_size, output_size, hidden_layers, wire_density=0.5):
         super(RandWiReNN, self).__init__()
 
-        # Load a pretrained ResNet18 model
-        self.cnn_model = models.resnet18(pretrained=True)
-
-        # Freeze initial layers to retain pretrained features
-        for param in self.cnn_model.parameters():
-            param.requires_grad = False
-
-        # Unfreeze the last convolutional block
-        for param in self.cnn_model.layer4.parameters():
-            param.requires_grad = True
-
-        # Replace the fully connected layer with Identity to get features
-        num_ftrs = self.cnn_model.fc.in_features
-        self.cnn_model.fc = nn.Identity()
+        print("Initializing RandWiReNN...")  # Debugging statement
 
         # Random-wired fully connected layers
         self.layers = nn.ModuleList()
-        prev_size = num_ftrs
-        self.dropout = nn.Dropout(p=0.5)  # Add dropout for regularization
+        prev_size = input_size
 
         for hidden_size in hidden_layers:
+            # print(f"Creating random layer: {prev_size} -> {hidden_size} with wire density {wire_density}")  # Debugging
             layer = self.create_random_layer(prev_size, hidden_size, wire_density)
             self.layers.append(layer)
             prev_size = hidden_size
 
         # Output layer
+        # print(f"Creating output layer: {prev_size} -> {output_size}")  # Debugging
         self.output_layer = nn.Linear(prev_size, output_size)
 
     def create_random_layer(self, in_features, out_features, wire_density):
@@ -45,14 +31,13 @@ class RandWiReNN(nn.Module):
         return linear_layer
 
     def forward(self, x):
-        # Pass through pretrained CNN model
-        x = self.cnn_model(x)
-
-        # Pass through random-wired fully connected layers
-        for layer in self.layers:
+        # print(f"Input to forward: {x.shape}")  # Debugging
+        # Pass through all random-wired layers
+        for i, layer in enumerate(self.layers):
+            # print(f"Layer {i}: Before activation {x.shape}")  # Debugging
             x = F.relu(layer(x))
-            x = self.dropout(x)  # Apply dropout
-
-        # Output layer
+            # print(f"Layer {i}: After activation {x.shape}")  # Debugging
+        # Pass through the output layer
         x = self.output_layer(x)
+        # print(f"Output shape: {x.shape}")  # Debugging
         return x
