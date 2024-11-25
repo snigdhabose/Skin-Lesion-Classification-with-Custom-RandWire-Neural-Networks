@@ -11,24 +11,22 @@ from torch.utils.tensorboard import SummaryWriter
 
 # Set device
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-print(f"Using device: {device}")  # Debugging
 
 # Hyperparameters
-input_size = 224 * 224 * 3  # Flattened size of input image (no CNN preprocessing)
+input_channels = 3
 output_size = 7
-hidden_layers = [1024, 512, 256]  # Fully connected layer sizes
-wire_density = 0.8  # Increased wire density
+cnn_layers = 3
+rnn_hidden_layers = [512, 256, 128]
+wire_density = 0.8
 learning_rate = 0.0001
 epochs = 150
 batch_size = 64
-patience = 10  # Increased early stopping patience
+patience = 10  # Allow longer patience for CNN-RNN
 
-# Custom Dataset for HAM10000
+# Dataset
 class HAM10000Dataset(Dataset):
     def __init__(self, csv_file, img_dir_part1, img_dir_part2, transform=None):
-        print("Loading HAM10000 dataset...")  # Debugging
         self.metadata = pd.read_csv(csv_file)
-        # print(f"Loaded metadata: {len(self.metadata)} records.")  # Debugging
         self.img_dir_part1 = img_dir_part1
         self.img_dir_part2 = img_dir_part2
         self.transform = transform
@@ -44,26 +42,26 @@ class HAM10000Dataset(Dataset):
         img_path = os.path.join(self.img_dir_part1, img_name)
         if not os.path.exists(img_path):
             img_path = os.path.join(self.img_dir_part2, img_name)
-        if not os.path.exists(img_path):
-            raise FileNotFoundError(f"Image {img_name} not found in directories.")
-
         image = Image.open(img_path).convert('RGB')
         label = torch.tensor(self.label_mapping[self.metadata.iloc[idx]['dx']], dtype=torch.long)
 
         if self.transform:
             image = self.transform(image)
 
-        # print(f"Loaded sample {idx}: {image.shape}, label: {label}")  # Debugging
-        return image.view(-1), label  # Flatten the image for RandWiReNN
+        return image, label
 
-# Data augmentation and transformation
+# Data Augmentation
 transform = transforms.Compose([
     transforms.Resize((224, 224)),
-    transforms.ToTensor(),  # Convert image to tensor
+    transforms.RandomHorizontalFlip(),
+    transforms.RandomVerticalFlip(),
+    transforms.RandomRotation(30),
+    transforms.RandomResizedCrop(224, scale=(0.8, 1.0)),
+    transforms.ToTensor(),
     transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
 ])
 
-# Dataset and DataLoader
+# Load Dataset
 dataset = HAM10000Dataset(
     csv_file='./data/HAM10000_metadata.csv',
     img_dir_part1='./data/HAM10000_images_part_1/',
@@ -71,7 +69,7 @@ dataset = HAM10000Dataset(
     transform=transform
 )
 
-# Split data into training and validation sets
+# Train-Validation Split
 train_indices, val_indices = train_test_split(
     list(range(len(dataset))),
     test_size=0.2,
@@ -79,40 +77,39 @@ train_indices, val_indices = train_test_split(
     random_state=42
 )
 
-print(f"Train size: {len(train_indices)}, Validation size: {len(val_indices)}")  # Debugging
-
 train_subset = Subset(dataset, train_indices)
 val_subset = Subset(dataset, val_indices)
 
-# Class weights for imbalanced dataset
+# Class Weights for Imbalance
 train_labels = [dataset[i][1] for i in train_indices]
 class_sample_count = torch.tensor([(train_labels.count(t)) for t in torch.unique(torch.tensor(train_labels), sorted=True)])
 class_weights = 1. / class_sample_count.float()
 samples_weight = torch.tensor([class_weights[t] for t in train_labels])
 
-# Weighted sampler
 sampler = WeightedRandomSampler(weights=samples_weight, num_samples=len(samples_weight), replacement=True)
 
 train_loader = DataLoader(train_subset, batch_size=batch_size, sampler=sampler)
 val_loader = DataLoader(val_subset, batch_size=batch_size, shuffle=False)
 
-# Initialize model, criterion, and optimizer
-print("Initializing RandWiReNN model...")  # Debugging
-model = RandWiReNN(input_size=input_size, output_size=output_size, hidden_layers=hidden_layers, wire_density=wire_density).to(device)
+# Model Initialization
+model = RandWiReNN(
+    input_channels=input_channels,
+    output_size=output_size,
+    cnn_layers=cnn_layers,
+    rnn_hidden_layers=rnn_hidden_layers,
+    wire_density=wire_density
+).to(device)
+
 criterion = torch.nn.CrossEntropyLoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=1e-5)
-
-# TensorBoard writer
 writer = SummaryWriter()
 
-# Training loop with early stopping
+# Training Loop
 def train():
-    print("Starting training loop...")  # Debugging
     best_val_loss = float('inf')
     trigger_times = 0
 
     for epoch in range(epochs):
-        # print(f"Epoch {epoch+1}/{epochs}")  # Debugging
         model.train()
         running_loss = 0
         with tqdm(total=len(train_loader), desc=f"Epoch {epoch+1}/{epochs}", unit="batch") as pbar:
@@ -124,11 +121,9 @@ def train():
                 loss.backward()
                 optimizer.step()
                 running_loss += loss.item()
-                pbar.set_postfix({"Loss": f"{running_loss/len(train_loader):.4f}"})
                 pbar.update(1)
         avg_train_loss = running_loss / len(train_loader)
         writer.add_scalar('Loss/train', avg_train_loss, epoch)
-        # print(f"Epoch {epoch+1}: Train Loss = {avg_train_loss:.4f}")  # Debugging
 
         # Validation
         model.eval()
@@ -148,18 +143,17 @@ def train():
         val_accuracy = 100 * correct / total
         writer.add_scalar('Loss/validation', avg_val_loss, epoch)
         writer.add_scalar('Accuracy/validation', val_accuracy, epoch)
-        # print(f"Epoch {epoch+1}: Val Loss = {avg_val_loss:.4f}, Val Acc = {val_accuracy:.2f}%")  # Debugging
+        print(f"Epoch {epoch+1}/{epochs}, Train Loss: {avg_train_loss:.4f}, Val Loss: {avg_val_loss:.4f}, Val Acc: {val_accuracy:.2f}%")
 
-        # Early stopping
+        # Early Stopping
         if avg_val_loss < best_val_loss:
             best_val_loss = avg_val_loss
             torch.save(model.state_dict(), 'best_randwirenn_model.pth')
-            # print(f"Model saved at epoch {epoch+1}")  # Debugging
             trigger_times = 0
         else:
             trigger_times += 1
             if trigger_times >= patience:
-                print('Early stopping triggered!')  # Debugging
+                print('Early stopping triggered!')
                 break
 
     print("Training completed.")

@@ -3,23 +3,34 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class RandWiReNN(nn.Module):
-    def __init__(self, input_size, output_size, hidden_layers, wire_density=0.5):
+    def __init__(self, input_channels, output_size, cnn_layers, rnn_hidden_layers, wire_density=0.8, rnn_input_size=512):
         super(RandWiReNN, self).__init__()
 
-        print("Initializing RandWiReNN...")  # Debugging statement
+        # CNN Layers
+        self.cnn_layers = nn.ModuleList()
+        in_channels = input_channels
+        for _ in range(cnn_layers):
+            self.cnn_layers.append(
+                nn.Sequential(
+                    nn.Conv2d(in_channels, 32, kernel_size=3, padding=1),
+                    nn.ReLU(),
+                    nn.MaxPool2d(kernel_size=2)
+                )
+            )
+            in_channels = 32
 
-        # Random-wired fully connected layers
-        self.layers = nn.ModuleList()
-        prev_size = input_size
+        # Calculate flattened size for RNN input
+        cnn_output_size = 32 * (224 // (2 ** cnn_layers)) * (224 // (2 ** cnn_layers))
 
-        for hidden_size in hidden_layers:
-            # print(f"Creating random layer: {prev_size} -> {hidden_size} with wire density {wire_density}")  # Debugging
+        # RNN Layers
+        self.rnn_layers = nn.ModuleList()
+        prev_size = cnn_output_size
+        for hidden_size in rnn_hidden_layers:
             layer = self.create_random_layer(prev_size, hidden_size, wire_density)
-            self.layers.append(layer)
+            self.rnn_layers.append(layer)
             prev_size = hidden_size
 
-        # Output layer
-        # print(f"Creating output layer: {prev_size} -> {output_size}")  # Debugging
+        # Output Layer
         self.output_layer = nn.Linear(prev_size, output_size)
 
     def create_random_layer(self, in_features, out_features, wire_density):
@@ -31,13 +42,17 @@ class RandWiReNN(nn.Module):
         return linear_layer
 
     def forward(self, x):
-        # print(f"Input to forward: {x.shape}")  # Debugging
-        # Pass through all random-wired layers
-        for i, layer in enumerate(self.layers):
-            # print(f"Layer {i}: Before activation {x.shape}")  # Debugging
+        # CNN Layers
+        for layer in self.cnn_layers:
+            x = layer(x)
+
+        # Flatten the output
+        x = x.view(x.size(0), -1)
+
+        # RNN Layers
+        for layer in self.rnn_layers:
             x = F.relu(layer(x))
-            # print(f"Layer {i}: After activation {x.shape}")  # Debugging
-        # Pass through the output layer
+
+        # Output Layer
         x = self.output_layer(x)
-        # print(f"Output shape: {x.shape}")  # Debugging
         return x
