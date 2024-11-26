@@ -11,29 +11,37 @@ print("Running main.py")
 
 # Hyperparameters
 input_size = 28 * 28  # Example for MNIST
-output_size = 10       # Example for MNIST (digits 0-9)
+output_size = 10  # Example for MNIST (digits 0-9)
 hidden_layers = [512, 256]  # Adjust as needed
 batch_size = 64
 
 # Data preprocessing
-transform = transforms.Compose([
-    transforms.ToTensor(),
-    transforms.Normalize((0.5,), (0.5,)),  # Normalize to [-1, 1]
-])
+transform = transforms.Compose(
+    [
+        transforms.ToTensor(),
+        transforms.Normalize((0.5,), (0.5,)),  # Normalize to [-1, 1]
+    ]
+)
 
 # Load the MNIST dataset (replace with your own dataset)
 # Load the MNIST dataset
-train_dataset = datasets.MNIST(root='data', train=True, download=True, transform=transform)
-print("Number of training samples:", len(train_dataset))  # Check the size of the dataset
+train_dataset = datasets.MNIST(
+    root="data", train=True, download=True, transform=transform
+)
+print(
+    "Number of training samples:", len(train_dataset)
+)  # Check the size of the dataset
 
-test_dataset = datasets.MNIST(root='data', train=False, download=True, transform=transform)
+test_dataset = datasets.MNIST(
+    root="data", train=False, download=True, transform=transform
+)
 
 # Create DataLoaders
 train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
 
 # Initialize the model
-model = RandWiReNN(input_size, output_size, hidden_layers, wire_density=0.25)
+model = RandWiReNN(input_size, output_size, hidden_layers, wire_density=0.5)
 # Test the model with a dummy input
 dummy_input = torch.randn(1, input_size)  # Create a dummy input tensor
 dummy_output = model(dummy_input)  # Run it through the model
@@ -54,11 +62,11 @@ for epoch in range(10):  # Change to a higher value as needed
         loss.backward()
         optimizer.step()
         # print(f"Batch loss: {loss.item()}")
-    
-    print(f'Epoch {epoch + 1}/10 completed, Loss: {loss.item()}')
+
+    print(f"Epoch {epoch + 1}/10 completed, Loss: {loss.item()}")
 
 # Save the model
-torch.save(model.state_dict(), 'skin_lesion_model.pth')
+torch.save(model.state_dict(), "skin_lesion_model.pth")
 print("Model saved.")
 # Get the current working directory
 current_directory = os.getcwd()
@@ -78,4 +86,4 @@ with torch.no_grad():  # Disable gradient calculation for testing
         correct += (predicted == labels).sum().item()
 
     accuracy = correct / total
-    print(f'Test Accuracy: {accuracy:.2f}')
+    print(f"Test Accuracy: {accuracy:.2f}")
