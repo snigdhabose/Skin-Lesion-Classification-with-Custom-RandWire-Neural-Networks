@@ -11,24 +11,24 @@ from torch.utils.tensorboard import SummaryWriter
 
 # Set device
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-print(f"Using device: {device}")  # Debugging
+print(f"Using device: {device}")  
 
 # Hyperparameters
-input_size = 224 * 224 * 3  # Flattened size of input image (no CNN preprocessing)
+input_size = 224 * 224 * 3  # Flattened size of input image 
 output_size = 7
 hidden_layers = [1024, 512, 256]  # Fully connected layer sizes
-wire_density = 0.8  # Increased wire density
+wire_density = 0.8 
 learning_rate = 0.0001
 epochs = 150
 batch_size = 64
-patience = 10  # Increased early stopping patience
+patience = 10  
 
 # Custom Dataset for HAM10000
 class HAM10000Dataset(Dataset):
     def __init__(self, csv_file, img_dir_part1, img_dir_part2, transform=None):
-        print("Loading HAM10000 dataset...")  # Debugging
+        print("Loading HAM10000 dataset...")  
         self.metadata = pd.read_csv(csv_file)
-        # print(f"Loaded metadata: {len(self.metadata)} records.")  # Debugging
+        
         self.img_dir_part1 = img_dir_part1
         self.img_dir_part2 = img_dir_part2
         self.transform = transform
@@ -53,13 +53,13 @@ class HAM10000Dataset(Dataset):
         if self.transform:
             image = self.transform(image)
 
-        # print(f"Loaded sample {idx}: {image.shape}, label: {label}")  # Debugging
+        # print(f"Loaded sample {idx}: {image.shape}, label: {label}")  
         return image.view(-1), label  # Flatten the image for RandWiReNN
 
 # Data augmentation and transformation
 transform = transforms.Compose([
     transforms.Resize((224, 224)),
-    transforms.ToTensor(),  # Convert image to tensor
+    transforms.ToTensor(),  
     transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
 ])
 
@@ -79,7 +79,7 @@ train_indices, val_indices = train_test_split(
     random_state=42
 )
 
-print(f"Train size: {len(train_indices)}, Validation size: {len(val_indices)}")  # Debugging
+print(f"Train size: {len(train_indices)}, Validation size: {len(val_indices)}")  
 
 train_subset = Subset(dataset, train_indices)
 val_subset = Subset(dataset, val_indices)
@@ -107,12 +107,12 @@ writer = SummaryWriter()
 
 # Training loop with early stopping
 def train():
-    print("Starting training loop...")  # Debugging
+    print("Starting training loop...")  
     best_val_loss = float('inf')
     trigger_times = 0
 
     for epoch in range(epochs):
-        # print(f"Epoch {epoch+1}/{epochs}")  # Debugging
+        
         model.train()
         running_loss = 0
         with tqdm(total=len(train_loader), desc=f"Epoch {epoch+1}/{epochs}", unit="batch") as pbar:
@@ -128,8 +128,7 @@ def train():
                 pbar.update(1)
         avg_train_loss = running_loss / len(train_loader)
         writer.add_scalar('Loss/train', avg_train_loss, epoch)
-        # print(f"Epoch {epoch+1}: Train Loss = {avg_train_loss:.4f}")  # Debugging
-
+       
         # Validation
         model.eval()
         val_loss = 0
@@ -148,18 +147,17 @@ def train():
         val_accuracy = 100 * correct / total
         writer.add_scalar('Loss/validation', avg_val_loss, epoch)
         writer.add_scalar('Accuracy/validation', val_accuracy, epoch)
-        # print(f"Epoch {epoch+1}: Val Loss = {avg_val_loss:.4f}, Val Acc = {val_accuracy:.2f}%")  # Debugging
-
+        
         # Early stopping
         if avg_val_loss < best_val_loss:
             best_val_loss = avg_val_loss
             torch.save(model.state_dict(), 'best_randwirenn_model.pth')
-            # print(f"Model saved at epoch {epoch+1}")  # Debugging
+            
             trigger_times = 0
         else:
             trigger_times += 1
             if trigger_times >= patience:
-                print('Early stopping triggered!')  # Debugging
+                print('Early stopping triggered!')  
                 break
 
     print("Training completed.")
