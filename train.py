@@ -21,7 +21,7 @@ wire_density = 0.8
 learning_rate = 0.0001
 epochs = 150
 batch_size = 64
-patience = 10  # Allow longer patience for CNN-RNN
+patience = 10  
 
 # Dataset
 class HAM10000Dataset(Dataset):
@@ -63,9 +63,9 @@ transform = transforms.Compose([
 
 # Load Dataset
 dataset = HAM10000Dataset(
-    csv_file='./data/HAM10000_metadata.csv',
-    img_dir_part1='./data/HAM10000_images_part_1/',
-    img_dir_part2='./data/HAM10000_images_part_2/',
+    csv_file='./Skin-Lesion-Classification-with-Custom-RandWire-Neural-Networks/data/HAM10000_metadata.csv',
+    img_dir_part1='./Skin-Lesion-Classification-with-Custom-RandWire-Neural-Networks/data/HAM10000_images_part_1/',
+    img_dir_part2='./Skin-Lesion-Classification-with-Custom-RandWire-Neural-Networks/data/HAM10000_images_part_2/',
     transform=transform
 )
 

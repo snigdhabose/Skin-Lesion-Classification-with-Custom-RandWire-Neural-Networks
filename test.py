@@ -4,7 +4,9 @@ from torchvision import transforms
 from models.randwirenn import RandWiReNN
 from PIL import Image
 import pandas as pd
-import os 
+import os
+import matplotlib.pyplot as plt
+
 # Set device
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -18,6 +20,7 @@ class HAM10000Dataset:
         self.label_mapping = {
             'akiec': 0, 'bcc': 1, 'bkl': 2, 'df': 3, 'mel': 4, 'nv': 5, 'vasc': 6
         }
+        self.label_names = {v: k for k, v in self.label_mapping.items()}
 
     def __len__(self):
         return len(self.metadata)
@@ -33,7 +36,7 @@ class HAM10000Dataset:
         if self.transform:
             image = self.transform(image)
 
-        return image, label
+        return image, label, img_name
 
 
 # Transform for testing (same as training, except no augmentation)
@@ -45,9 +48,9 @@ transform = transforms.Compose([
 
 # Load test dataset
 test_dataset = HAM10000Dataset(
-    csv_file='./data/HAM10000_metadata.csv',
-    img_dir_part1='./data/HAM10000_images_part_1/',
-    img_dir_part2='./data/HAM10000_images_part_2/',
+    csv_file='./Skin-Lesion-Classification-with-Custom-RandWire-Neural-Networks/data/HAM10000_metadata.csv',
+    img_dir_part1='./Skin-Lesion-Classification-with-Custom-RandWire-Neural-Networks/data/HAM10000_images_part_1/',
+    img_dir_part2='./Skin-Lesion-Classification-with-Custom-RandWire-Neural-Networks/data/HAM10000_images_part_2/',
     transform=transform
 )
 
@@ -65,6 +68,9 @@ model.load_state_dict(torch.load('best_randwirenn_model.pth'))
 model.to(device)
 model.eval()
 
+# Indices to skip (visualized in Model 1)
+visualized_indices_model1 = {0}  
+
 # Evaluate model
 print("Starting evaluation...")
 correct = 0
@@ -72,8 +78,13 @@ total = 0
 class_correct = [0] * 7
 class_total = [0] * 7
 
+sample_images = []
+sample_predictions = []
+sample_labels = []
+sample_names = []
+
 with torch.no_grad():
-    for images, labels in test_loader:
+    for batch_idx, (images, labels, img_names) in enumerate(test_loader):
         images, labels = images.to(device), labels.to(device)
         outputs = model(images)
         _, predicted = torch.max(outputs, 1)
@@ -81,16 +92,42 @@ with torch.no_grad():
         correct += (predicted == labels).sum().item()
 
         for i in range(len(labels)):
-            label = labels[i]
-            class_correct[label] += (predicted[i] == label).item()
+            label = labels[i].item()
+            pred = predicted[i].item()
+            class_correct[label] += (pred == label)
             class_total[label] += 1
+
+            
+            if (
+                len(sample_images) < 5
+                and pred == label
+                and (batch_idx * test_loader.batch_size + i) not in visualized_indices_model1
+            ):
+                sample_images.append(images[i].cpu().permute(1, 2, 0))  
+                sample_predictions.append(pred)
+                sample_labels.append(label)
+                sample_names.append(img_names[i])
 
 # Overall Accuracy
 print(f"Test Accuracy: {100 * correct / total:.2f}%")
 
 # Class-wise Accuracy
+label_mapping = test_dataset.label_mapping
+label_names = {v: k for k, v in label_mapping.items()}
 for i in range(7):
     if class_total[i] > 0:
-        print(f"Accuracy of class {i} : {100 * class_correct[i] / class_total[i]:.2f}%")
+        print(f"Accuracy of {label_names[i]}: {100 * class_correct[i] / class_total[i]:.2f}%")
     else:
-        print(f"No samples for class {i}")
+        print(f"No samples for {label_names[i]}")
+
+# Visualize correct predictions
+print("\nVisualizing correctly classified images:")
+for i, image in enumerate(sample_images):
+    plt.figure()
+    plt.imshow((image.numpy() * 0.5 + 0.5).clip(0, 1))  # De-normalize for visualization
+    plt.title(
+        f"Correct Prediction: {label_names[sample_predictions[i]]} | True Label: {label_names[sample_labels[i]]}"
+    )
+    plt.axis("off")
+    plt.savefig(f"visualization_correct_model2_img_{sample_names[i]}.png")
+    plt.show()
