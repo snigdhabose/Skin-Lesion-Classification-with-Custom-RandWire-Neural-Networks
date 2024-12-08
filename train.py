@@ -17,11 +17,11 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 input_channels = 3
 output_size = 7
 hidden_layers = [512, 256, 128]
-wire_density = 0.8  # Increased wire density
-learning_rate = 0.0001  # Increased learning rate
+wire_density = 0.8  
+learning_rate = 0.0001  
 epochs = 150
-batch_size = 64  # Increased batch size
-patience = 5  # Early stopping patience
+batch_size = 64  
+patience = 5  
 
 # Custom Dataset for HAM10000
 class HAM10000Dataset(Dataset):
@@ -68,9 +68,9 @@ transform = transforms.Compose([
 
 # Dataset and DataLoader
 dataset = HAM10000Dataset(
-    csv_file='./data/HAM10000_metadata.csv',
-    img_dir_part1='./data/HAM10000_images_part_1/',
-    img_dir_part2='./data/HAM10000_images_part_2/',
+    csv_file='./Skin-Lesion-Classification-with-Custom-RandWire-Neural-Networks/data/HAM10000_metadata.csv',
+    img_dir_part1='./Skin-Lesion-Classification-with-Custom-RandWire-Neural-Networks/data/HAM10000_images_part_1/',
+    img_dir_part2='./Skin-Lesion-Classification-with-Custom-RandWire-Neural-Networks/data/HAM10000_images_part_2/',
     transform=transform
 )
 
